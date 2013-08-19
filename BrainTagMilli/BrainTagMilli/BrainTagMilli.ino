@@ -5,11 +5,19 @@
  *  |    / __  / ___/ __ `/ / __ \     / / / __ `/ __ `/   |
  *  |   / /_/ / /  / /_/ / / / / /    / / / /_/ / /_/ /    |
  *  |  /_____/_/   \__,_/_/_/ /_/    /_/  \__,_/\__, /     |
- *  |                                          /____/      |
+ *  |                                          /____/      | Milli() Version!
  *  +------------------------------------------------------+
  * Created: 19 July 2013 by Alex Rosengarten
  * Arduino Brain Library by Eric Mika, 2010
- * Last Update: 19 August 2013 
+ * Last Update: 16 August 2013 
+ *
+ * This version of BrainTag attemps to time the game based on measuring time differences (via the milli() function)
+ * instead of pausing the Arduino with the delay() function. The reason I attempt to do this is because when the 
+ * Arduino uses delay, it cannot recieve any input or perform any other functions. With the milli() approach, it may
+ * be possible to eliminate this problem, allowing, for instance, the Arduino to read an IR emitter while also 
+ * blinking an IR LED. Though the microcontroller does not have serial capabilities (I'm using an Uno), this 
+ * work-around would allow a single Arduino device to execute a better game laser tag where the players can shoot 
+ * and be shot at nearly the same time.
  *
  * Since the last version:
  * - Changed settings for second headset
@@ -27,8 +35,8 @@ Brain brain(Serial);
 boolean DEBUG = true;
 
 // Pin Settings
-const byte irPin = 2;          // IR LED
-const byte irPin2 = 8;         // laser
+const byte irPin = 8;          // laser
+const byte irPin2 = 2;         // IR LED
 const byte rPin = 3;           // RGB LED Pins
 const byte gPin = 5;
 const byte bPin = 6;
@@ -54,7 +62,6 @@ String headsetStatus;
 boolean sampleFullFlag  = false;
 
 // Other
-
 byte toggleCount = -1;
 byte eegState = -1; 
 byte eegData[numStates] = {};
@@ -65,6 +72,7 @@ byte eegSample[sampleSize] = {}; byte sample_index = 0;
 long series_x = sampleSize/2+0.5;
 
 float topMagReached = defaultFireThreshold;
+unsigned float tmpMilli = 0;
 unsigned long waitTime = 0;
 unsigned long offTime = 0;
 byte oldAttention;
@@ -75,7 +83,6 @@ int offTone = NOTE_F4;
 int atnTone[] = {NOTE_E6,NOTE_G6,NOTE_GS6};
 int mdtnTone[] = {NOTE_DS6,NOTE_D6,NOTE_C6};
 int fireTone[] = {NOTE_C7,NOTE_D7};
-int headsetOnTone = NOTE_F2;
 
 void setup() {
   Serial.begin(9600); 
@@ -119,9 +126,7 @@ void loop() {
 
   // Toggle Game Mode via the Button Pin input
   if(digitalRead(buttonPin) == HIGH) {
-    delay(200);,
     toggleState(toggleCount++);  
-    delay(400);
   } /* END TOGGLE GAME MODE */
   
   // Gather EEG Data whenever a packet of data is recieved from the headset. 
@@ -168,7 +173,6 @@ void loop() {
       // Game on!
       headsetStatus = "on"; 
       digitalWrite(sgPin,HIGH);
-      //tone(spPin,headsetOnTone,250);
     } /* END HEADSET STATUS */
     
     if(DEBUG) Serial.println("Headset Status: " + headsetStatus);
@@ -227,14 +231,15 @@ void collectSample(byte data){
 
 void ledArrayBlink(const byte pin[], int numBlinks, int del){
   int i = 0;
+  byte j;
   unsigned long waitTime;
   while(i < numBlinks){
-    for(byte j = 0; j < numMagPins; j++){        // j is a byte since numMagPins is also a byte datatype
+    for(j = 0; j < numMagPins; j++){        // j is a byte since numMagPins is also a byte datatype
       digitalWrite(pin[j],HIGH);
     } /* END FOR LOOP */
     delay(del);
     
-    for(byte j = 0; j < numMagPins; j++){
+    for(j = 0; j < numMagPins; j++){
       digitalWrite(pin[j],LOW);
     } /* END FOR LOOP */
     delay(del); 

@@ -13,9 +13,9 @@
  * Last Update: 20 August 2013 
  *
  * Since the last version:
- * - Added IR encoder/support for IR receiver sketch, written by David Cuartielles
- *   and Paul Malmstem (http://goo.gl/UxXAMd).
- * - Commented out unused methods (determineIfFire + collectSamples) to save space. 
+ * - Added IR encoder/support for IR receiver sketch, written by David Cuartielles and Paul Malmstem
+ *   (http://goo.gl/UxXAMd).
+ * - Commented out unused methods (determineIfFire + collectSamples) to save space, cleaned up code.
  */
 
 #include <Brain.h>
@@ -45,10 +45,9 @@ const byte numStates = 3;               // Default: Off, Attention, Meditation
                                         // 6 = Gamma (Low and Mid)
                                         
 //const byte sampleSize = 10;             // Number of values used to calculate [level/trigger] (Beta)
-const int fireDuration = 500;           // Time (ms) IR led fires. 
+const int fireDuration = 500;             // Time (ms) IR led fires. 
 //const float defaultFireThreshold = 80;   // A value between 0 - 100. Determines brink of impulse trigger.
-
-const int IRout = 515;    // The IR key the headset will send out when the headset fires.
+const int IRout = 10;    // The IR key the headset will send out when the headset fires.
 /* END SETTINGS */
 
 // Flags
@@ -57,7 +56,7 @@ String headsetStatus;
 boolean sampleFullFlag  = false;
 
 // Other
-int i; // General counter
+byte i; byte j; int k; // General counter
 byte toggleCount = -1;
 byte eegState = -1; 
 byte eegData[numStates] = {};
@@ -74,6 +73,7 @@ byte oldAttention;
 byte oldMeditation;
 
 // IR remote sender
+int data[12];
 int start_bit = 2400;                    // Start bit threshold (Microseconds)
 int bin_1 = 1200;                        // Binary 1 threshold (Microseconds)
 int bin_0 = 600;                         // Binary 0 threshold (Microseconds)
@@ -110,8 +110,10 @@ void setup() {
     Serial.println("Test: intensity pins should turn on now.");
     ledArrayBlink(magPins,1,500);
     // IR pin  test
-    Serial.println("Test: Laser/IR pins should turn on now.");
+    Serial.println("Test: IR pin should turn on now.");
     ledBlink(irPin,1,500);
+    Serial.println("Test: Laser pin should turn on now.");
+    ledBlink(irPin2,1,500);
     Serial.println("Ready.");
   } /* END DEBUG */
 } /* END SETUP */
@@ -138,10 +140,10 @@ void loop() {
       Serial.print(brain.readSignalQuality()); Serial.print(" ");
       Serial.print(brain.readAttention());     Serial.print(" ");
       Serial.print(brain.readMeditation());    Serial.print(" LB:");
-      Serial.print(brain.readLowBeta());       Serial.print(" HB:");
-      Serial.print(brain.readHighBeta());      Serial.print(" LA:");
-      Serial.print(brain.readLowAlpha());      Serial.print(" HA:");
-      Serial.println(brain.readHighAlpha());
+     // Serial.print(brain.readLowBeta());       Serial.print(" HB:");
+     // Serial.print(brain.readHighBeta());      Serial.print(" LA:");
+     // Serial.print(brain.readLowAlpha());      Serial.print(" HA:");
+     // Serial.println(brain.readHighAlpha());
     } /* END DEBUG */
     
      // Collect EEG data 
@@ -150,7 +152,7 @@ void loop() {
     eegData[2] = brain.readMeditation();
     
  /* Note: To read more data, you have to uncomment these lines *AND* change the "numStates" variable in settings 
-    *AND* uncomment the cases in the toggleGame method below. 
+    *AND* add cases in the toggleGame method below. 
     eegData[3] = brain.readDelta();
     eegData[4] = brain.readTheta();
     eegData[5] = brain.readLowAlpha();
@@ -192,8 +194,18 @@ void loop() {
     digitalWrite(irPin,LOW);
     digitalWrite(irPin2,LOW);
   }
+
   // Method call to determine and execute a shot
   //determineIfFire(eegData[eegState]);
+  
+  /** IR send test **
+    oscillationWrite(irPin, start_bit);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+    oscillationWrite(irPin,bin_0);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+    oscillationWrite(irPin,bin_1);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+  */
   
   // Cycle Toggle Count - so the game can keep track of unlimited game state changes.
   if(toggleCount == numStates) toggleCount = 0;     
@@ -204,7 +216,7 @@ void loop() {
 /* METHODS */
 
 /** determineIfFire(byte data)
-
+ *
 void determineIfFire(byte data){
   float weight = 0;
   if(data >= topMagReached && headsetStatus == "on" && waitTime < millis()){
@@ -214,12 +226,11 @@ void determineIfFire(byte data){
     Serial.print("Fired! data/topMagReached: ");
     Serial.print(data); Serial.print("  "); Serial.println(topMagReached);
   } 
-} END determineIfFire */
+} /* END determineIfFire */
 
 
 /** collectSample(byte data)         (currently not in use)
  *
- 
 void collectSample(byte data){
   eegSample[sample_index++] = data; // Set current value to current eegSample index, then increment the index
   if (sample_index == sampleSize-1){
@@ -229,38 +240,49 @@ void collectSample(byte data){
   }
   if(DEBUG && sampleFullFlag) for(int i = 0; i<sampleSize;i++)  Serial.print(eegSample[i]);
   
-}
+} /* END collectSample */
+
+/** ledArrayBlink
+ * 
+ *
  */
 void ledArrayBlink(const byte pin[], int numBlinks, int del){
-  int i = 0;
   unsigned long waitTime;
-  while(i < numBlinks){
-    for(byte j = 0; j < numMagPins; j++){        // j is a byte since numMagPins is also a byte datatype
+  k = 0;
+  while(k < numBlinks){
+    for(j = 0; j < numMagPins; j++){        // j is a byte since numMagPins is also a byte datatype
       digitalWrite(pin[j],HIGH);
     } /* END FOR LOOP */
     delay(del);
     
-    for(byte j = 0; j < numMagPins; j++){
+    for(j = 0; j < numMagPins; j++){
       digitalWrite(pin[j],LOW);
     } /* END FOR LOOP */
     delay(del); 
     
-    i++;
+    k++;
   } /* END WHILE LOOP */    
 } /* END ledArrayBlink */
 
+/** ledBlink
+ *
+ *
+ */
 void ledBlink(byte pin, int numBlinks, int del){
-  int i = 0;
-  while(i < numBlinks){
+  k = 0;
+  while(k < numBlinks){
     digitalWrite(pin,HIGH);
     delay(del);
     digitalWrite(pin,LOW);
     delay(del); 
-    i++;
+    k++;
   } /* END WHILE LOOP */
 } /* END ledBlink */
  
-
+/** intensityMeter
+ *
+ *
+ */
 void intensityMeter(int mag){
   if(mag <= -1) ledBlink(rPin,2,200);
   byte ledPWR1 = map(constrain(mag, 00, 33), 00, 33, 0, 255);
@@ -273,29 +295,35 @@ void intensityMeter(int mag){
   if(ledPWR3 >= 100 && headsetStatus == "on" && waitTime < millis()){ 
     //digitalWrite(irPin,HIGH);
     //digitalWrite(irPin2,HIGH);
-    int key;
-    for(i = 0; i < 10; i++){
-      key  = sendIRKey(IRout);  // Fetch the key
-    }
+    
+    // This transmits a signal much like a TV remote
+    oscillationWrite(irPin, start_bit);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+    oscillationWrite(irPin,bin_0);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+    oscillationWrite(irPin,bin_1);
+    digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
+  
     offTime = millis() + fireDuration;
     waitTime = millis() + fireDuration + 100;
     Serial.print("Fired! [mag] [key sent] :");
-    Serial.print(mag); Serial.print("  "); Serial.println(key);
+    Serial.print(mag); //Serial.print("  "); /Serial.println(key);
  }
   
 } /* END intensityMeter */
 
+/** toggleState
+ *
+ *
+ */
 void toggleState(byte t) {
-  int i;
   if(DEBUG) {
     Serial.print("Toggle Count is ");
     Serial.print(t);
     Serial.print(" and mod(t,number of states) is: ");
     Serial.println(t % numStates);
   } /* END DEBUG */
-  
   eegState = t % numStates;
-  
   switch (eegState){
     case 0: // OFF
       digitalWrite(rPin,HIGH);
@@ -306,7 +334,6 @@ void toggleState(byte t) {
       noTone(spPin);
       if(DEBUG) Serial.println("State 0: Off - Red");
       break; 
-      
     case 1: // ATTENTION
       digitalWrite(rPin,LOW);
       digitalWrite(gPin,HIGH);
@@ -318,7 +345,6 @@ void toggleState(byte t) {
       } /* END FOR LOOP */
       if(DEBUG) Serial.println("State 1: Attention - Green");
       break;
-      
     case 2: // MEDITATION
       digitalWrite(rPin,LOW);
       digitalWrite(gPin,LOW);
@@ -333,13 +359,12 @@ void toggleState(byte t) {
   } /* END SWITCH CASE */
 } /* END toggleState */
 
-/**
+/** sendIRKey + oscillationWrite
  * The next two methods were written by David Cuartielle (based on Paul Malmsetm's code), taken from 
  * the following Arduino Forum thread, originally posted in 2007: http://goo.gl/UxXAMd
- */
+ 
 int sendIRKey(int dataOut) {
-  int data[12];
-  digitalWrite(irPin, HIGH);     //Ok, i'm ready to send
+  //digitalWrite(sgPin, HIGH);     //Ok, i'm ready to send
   for (i=0; i<12; i++) {
     data[i] = dataOut>>i & B1;   //encode data as '1' or '0'
     }
@@ -356,9 +381,9 @@ int sendIRKey(int dataOut) {
     digitalWrite(irPin, HIGH);
     delayMicroseconds(guardTime);
   }
-  delay(20);
+  //delay(20);
   return dataOut;                            //Return key number
-}
+} */
 
 // this will write an oscillation at 38KHz for a certain time in useconds
 void oscillationWrite(int pin, int time) {

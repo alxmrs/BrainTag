@@ -411,6 +411,7 @@ void oscillationWrite(int pin, int time) {
 / / /_       __\ \_\ \/___/ / / / /  \ \ \    
 \_\___\     /____/_/\_____\/  \/_/    \_\/    
 
-[So I have a think with the ascii-text generator (http://goo.gl/KJ3Ot), sew me].
 */
+
+/* END OF FILE */
 

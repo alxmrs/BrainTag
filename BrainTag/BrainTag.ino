@@ -10,12 +10,10 @@
  *
  * Created: 19 July 2013 by Alex Rosengarten
  * Arduino Brain Library by Eric Mika, 2010
- * Last Update: 20 August 2013 
+ * Last Update: 27 January 2014 
  *
  * Since the last version:
- * - Added IR encoder/support for IR receiver sketch, written by David Cuartielles and Paul Malmstem
- *   (http://goo.gl/UxXAMd).
- * - Commented out unused methods (determineIfFire + collectSamples) to save space, cleaned up code.
+ * Deleted methods: determineIfFire(byte data); and collectSample(byte data); as these were not being used.  
  */
 
 #include <Brain.h>
@@ -88,7 +86,7 @@ int fireTone[]    = {NOTE_C7,  NOTE_D7};
 int headsetOnTone =  NOTE_F2;
 
 void setup() {
-  Serial.begin(9600); 
+  Serial.begin(57600); // Baud rate
   
   // Inputs
   pinMode(buttonPin, INPUT);
@@ -198,14 +196,17 @@ void loop() {
   // Method call to determine and execute a shot
   //determineIfFire(eegData[eegState]);
   
-  /** IR send test **
+  /*
+  if(DEBUG){
+  // IR send test **
     oscillationWrite(irPin, start_bit);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
     oscillationWrite(irPin,bin_0);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
     oscillationWrite(irPin,bin_1);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
-  */
+ // */
+  //}
   
   // Cycle Toggle Count - so the game can keep track of unlimited game state changes.
   if(toggleCount == numStates) toggleCount = 0;     
@@ -214,33 +215,6 @@ void loop() {
 
 
 /* METHODS */
-
-/** determineIfFire(byte data)
- *
-void determineIfFire(byte data){
-  float weight = 0;
-  if(data >= topMagReached && headsetStatus == "on" && waitTime < millis()){
-    topMagReached += (data - topMagReached) * weight;  // Incrementally adjust 
-    ledBlink(irPin,1,fireDuration);
-    waitTime = millis() + 500;
-    Serial.print("Fired! data/topMagReached: ");
-    Serial.print(data); Serial.print("  "); Serial.println(topMagReached);
-  } 
-} /* END determineIfFire */
-
-
-/** collectSample(byte data)         (currently not in use)
- *
-void collectSample(byte data){
-  eegSample[sample_index++] = data; // Set current value to current eegSample index, then increment the index
-  if (sample_index == sampleSize-1){
-    sample_index == 0;  // This makes eegSample into a circular array
-    sampleFullFlag = true;
-    
-  }
-  if(DEBUG && sampleFullFlag) for(int i = 0; i<sampleSize;i++)  Serial.print(eegSample[i]);
-  
-} /* END collectSample */
 
 /** ledArrayBlink
  * 
@@ -296,7 +270,7 @@ void intensityMeter(int mag){
     //digitalWrite(irPin,HIGH);
     //digitalWrite(irPin2,HIGH);
     
-    // This transmits a signal much like a TV remote
+    // This transmits a signal like a TV remote
     oscillationWrite(irPin, start_bit);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
     oscillationWrite(irPin,bin_0);
@@ -308,7 +282,7 @@ void intensityMeter(int mag){
     waitTime = millis() + fireDuration + 100;
     Serial.print("Fired! [mag] [key sent] :");
     Serial.print(mag); //Serial.print("  "); /Serial.println(key);
- }
+ } 
   
 } /* END intensityMeter */
 
@@ -362,7 +336,7 @@ void toggleState(byte t) {
 /** sendIRKey + oscillationWrite
  * The next two methods were written by David Cuartielle (based on Paul Malmsetm's code), taken from 
  * the following Arduino Forum thread, originally posted in 2007: http://goo.gl/UxXAMd
- 
+ */
 int sendIRKey(int dataOut) {
   //digitalWrite(sgPin, HIGH);     //Ok, i'm ready to send
   for (i=0; i<12; i++) {
@@ -383,7 +357,7 @@ int sendIRKey(int dataOut) {
   }
   //delay(20);
   return dataOut;                            //Return key number
-} */
+} //*/
 
 // this will write an oscillation at 38KHz for a certain time in useconds
 void oscillationWrite(int pin, int time) {

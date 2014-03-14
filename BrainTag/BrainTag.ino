@@ -396,7 +396,6 @@ void determineIfFire(int mag){
   }
   
   // Turn on IR LED  (fire)
-
   if(mag >= getThreshold( eegState) && headsetStatus == "on" && currentTime >= waitTime){ 
     
     // This transmits a signal like a TV remote

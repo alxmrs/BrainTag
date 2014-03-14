@@ -10,7 +10,6 @@
  *
  * Created: 19 July 2013 by Alex Rosengarten
  * Arduino Brain Library by Eric Mika, 2010
- * Last Update: 13 March 2014 
  * Last Update: 14 March 2014 
  *
  * Since the last version:
@@ -34,7 +33,6 @@ boolean DEBUG = true;
 // Pin Settings
 const byte irPin = 2;          // IR LED
 const byte irPin2 = 8;         // laser
-const byte irRec;              // Sensor pin 1 wired through a 220 ohm resistor
 const byte irRec = 10;              // Sensor pin 1 wired through a 220 ohm resistor
 const byte rPin = 3;           // RGB LED Pins
 const byte gPin = 5;
@@ -42,11 +40,8 @@ const byte bPin = 6;
 const byte spPin =  7;          // Speaker Pin
 const byte numMagPins = 3; 
 const byte magPins[numMagPins] = {9, 10, 11};  // Magnitude indicators
-const byte ledPWR[numMagPins]  = {0, 0, 0};    // Indicator LED power levels
       byte ledPWR[numMagPins]  = {0, 0, 0};    // Indicator LED power levels
 const byte numLifePins = 5;
-const byte lifePins[numLifePins]; // = {3, 4, 5, 7, 8};  // Life/health indicators
-const byte lifePWR[numLifePins];  // = {0, 0, 0, 0, 0};  // Life/health LED power levels
 const byte lifePins[numLifePins] = {3, 4, 5, 7, 8};  // Life/health indicators
       byte lifePWR[numLifePins] = {0, 0, 0, 0, 0};  // Life/health LED power levels
 const byte buttonPin = 12;     // Pushbutton pin
@@ -142,7 +137,6 @@ void setup() {
   toggleState(toggleCount++); 
   
   // Interrupts
-  attachInterrupt(0, getIRkey, FALLING); // Try either FALLING or RISING
   attachInterrupt(0, getIRKey, FALLING); // Try either FALLING or RISING
   
   // Debug tests
@@ -319,17 +313,11 @@ void intensityMeter(int mag){
   if(mag < 0) ledBlink(rPin,2,200); // Blink red if negative. Something is broken.
   
   // Divide the input magnitude into three ranges. Map each range to a brightness val
-  byte ledPWR[0] = map(constrain(mag, 00, 33), 00, 33, 0, 255);
-  byte ledPWR[1] = map(constrain(mag, 33, 66), 33, 66, 0, 255);
-  byte ledPWR[2] = map(constrain(mag, 66, 99), 66, 99, 0, 255);
   ledPWR[0] = map(constrain(mag, 00, 33), 00, 33, 0, 255);
   ledPWR[1] = map(constrain(mag, 33, 66), 33, 66, 0, 255);
   ledPWR[2] = map(constrain(mag, 66, 99), 66, 99, 0, 255);
   
   // Display the brightness values over the LEDs
-  analogWrite(magPins[0],ledPWR1);
-  analogWrite(magPins[1],ledPWR2);
-  analogWrite(magPins[2],ledPWR3);
   analogWrite(magPins[0],ledPWR[0]);
   analogWrite(magPins[1],ledPWR[1]);
   analogWrite(magPins[2],ledPWR[2]);
@@ -408,7 +396,6 @@ void determineIfFire(int mag){
   }
   
   // Turn on IR LED  (fire)
-  if(mag >= 70 && headsetStatus == "on" && currentTime >= waitTime){ 
 
   if(mag >= getThreshold( eegState) && headsetStatus == "on" && currentTime >= waitTime){ 
     

@@ -11,6 +11,7 @@
  * Created: 19 July 2013 by Alex Rosengarten
  * Arduino Brain Library by Eric Mika, 2010
  * Last Update: 13 March 2014 
+ * Last Update: 14 March 2014 
  *
  * Since the last version:
  * - Merged sender code and reciever code into this file using an interrupt
@@ -33,6 +34,7 @@ boolean DEBUG = true;
 const byte irPin = 2;          // IR LED
 const byte irPin2 = 8;         // laser
 const byte irRec;              // Sensor pin 1 wired through a 220 ohm resistor
+const byte irRec = 10;              // Sensor pin 1 wired through a 220 ohm resistor
 const byte rPin = 3;           // RGB LED Pins
 const byte gPin = 5;
 const byte bPin = 6;
@@ -40,9 +42,12 @@ const byte spPin =  7;          // Speaker Pin
 const byte numMagPins = 3; 
 const byte magPins[numMagPins] = {9, 10, 11};  // Magnitude indicators
 const byte ledPWR[numMagPins]  = {0, 0, 0};    // Indicator LED power levels
+      byte ledPWR[numMagPins]  = {0, 0, 0};    // Indicator LED power levels
 const byte numLifePins = 5;
 const byte lifePins[numLifePins]; // = {3, 4, 5, 7, 8};  // Life/health indicators
 const byte lifePWR[numLifePins];  // = {0, 0, 0, 0, 0};  // Life/health LED power levels
+const byte lifePins[numLifePins] = {3, 4, 5, 7, 8};  // Life/health indicators
+      byte lifePWR[numLifePins] = {0, 0, 0, 0, 0};  // Life/health LED power levels
 const byte buttonPin = 12;     // Pushbutton pin
 const byte sgPin = 13;         // Signal Quality Pin
 
@@ -56,6 +61,10 @@ const byte numStates = 3;                  // Default: Off, Attention, Meditatio
 const int fireDuration = 500;              // Time (ms) IR led fires. 
 //const float defaultFireThreshold = 80;   // A value between 0 - 100. Determines brink of impulse trigger.
 const int IRout = 10;    // The IR key the headset will send out when the headset fires.
+const int percentSplit = 10;               // A value between 0 and 99. Determines the percentile split of the sample
+                                           // EEG data. This is used to determine the threshold for firing for each 
+                                           // user. Default: 10 -- 10/90 split. 
+                                         
 /* END SETTINGS */
 
 // Flags
@@ -70,7 +79,13 @@ byte eegState = -1;
 byte eegir_data[numStates] = {};
 volatile int ir_data[12]; 
 volatile int ir_key = 0;  
+byte health = 100;
 //byte eegSample[sampleSize] = {}; byte sample_index = 0; 
+
+// Arrays to store collected EEG data
+byte eegData[3] = {};
+byte medData[100] = {}; byte medInd = 0;
+byte attData[100] = {}; byte attInd = 0;
 
 // The sum of a series of incrementing integers {1, 2, 3, ..., n-1, n} is equal to n^2/2 + n/2.
 // Divide this by sample size (n) and you get n/2 + 1/2. 
@@ -127,6 +142,7 @@ void setup() {
   
   // Interrupts
   attachInterrupt(0, getIRkey, FALLING); // Try either FALLING or RISING
+  attachInterrupt(0, getIRKey, FALLING); // Try either FALLING or RISING
   
   // Debug tests
   if(DEBUG){
@@ -305,11 +321,17 @@ void intensityMeter(int mag){
   byte ledPWR[0] = map(constrain(mag, 00, 33), 00, 33, 0, 255);
   byte ledPWR[1] = map(constrain(mag, 33, 66), 33, 66, 0, 255);
   byte ledPWR[2] = map(constrain(mag, 66, 99), 66, 99, 0, 255);
+  ledPWR[0] = map(constrain(mag, 00, 33), 00, 33, 0, 255);
+  ledPWR[1] = map(constrain(mag, 33, 66), 33, 66, 0, 255);
+  ledPWR[2] = map(constrain(mag, 66, 99), 66, 99, 0, 255);
   
   // Display the brightness values over the LEDs
   analogWrite(magPins[0],ledPWR1);
   analogWrite(magPins[1],ledPWR2);
   analogWrite(magPins[2],ledPWR3);
+  analogWrite(magPins[0],ledPWR[0]);
+  analogWrite(magPins[1],ledPWR[1]);
+  analogWrite(magPins[2],ledPWR[2]);
 } /* END intensityMeter */
 
 
@@ -387,6 +409,8 @@ void determineIfFire(int mag){
   // Turn on IR LED  (fire)
   if(mag >= 70 && headsetStatus == "on" && currentTime >= waitTime){ 
 
+  if(mag >= getThreshold( eegState) && headsetStatus == "on" && currentTime >= waitTime){ 
+    
     // This transmits a signal like a TV remote
     oscillationWrite(irPin, start_bit_out);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
@@ -406,6 +430,70 @@ void determineIfFire(int mag){
  }
  
 } /* END determineIfFire */
+
+/**
+ * @param eegState  Current game mode. Used to decide which array of collected EEG data to choose from.
+ * @return          Threshold value, used to determine if headset fires.
+ */
+
+byte getThreshold(int eegState){
+    // to make a copy of what is recording and what to change
+    byte threshold;
+    byte data[100] = {};
+
+    if( eegState == 1 ) { // measuring attention level
+      //create a copy of the attention lv data
+      for(i = 0; i < 100; i++)
+        data[i]=attData[i];
+    }
+    else if ( eegState == 2 ){
+      //create a copy of the attention lv data
+      for(i = 0; i < 100; i++)
+        data[i]=medData[i];
+    }
+    // reorder from lowest to highest
+    quickSort(data, 0, 99); 
+    
+    // calc the threshold value 
+    threshold = (data[percentSplit]*data[percentSplit+1])/2;
+    return threshold;
+} /* END getThreshold */
+
+
+/** quicksort
+ * Taken from: http://www.algolist.net/Algorithms/Sorting/Quicksort
+ * @param arr[]   Array of data to sort
+ * @param left    index controller
+ * @param right   index controller
+ */
+void quickSort(byte arr[], byte left, byte right) {
+      i = left;
+      j = right;
+      byte tmp;
+      byte pivot = arr[(left + right) / 2];
+ 
+      /* partition */
+      while (i <= j) {
+            while (arr[i] < pivot)
+                  i++;
+            while (arr[j] > pivot)
+                  j--;
+            if (i <= j) {
+                  tmp = arr[i];
+                  arr[i] = arr[j];
+                  arr[j] = tmp;
+                  i++;
+                  j--;
+            }
+      };
+ 
+      /* recursion */
+      if (left < j)
+            quickSort(arr, left, j);
+      if (i < right)
+            quickSort(arr, i, right);
+}
+
 
 /** toggleState
  * Takes in a toggle state counter to determine which game mode to be in. By 

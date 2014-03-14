@@ -19,6 +19,7 @@
  *   » Simplified the getIRkey() function to execute in as few commands as possible.
  *     TODO: Optimize method in Assembly
  *   » Attached an interrupt such that getIRkey() is called when the IR sensor pin on falling edge.
+ * - Adjusted settings to fid current form factor
  */
 
 #include <Brain.h>

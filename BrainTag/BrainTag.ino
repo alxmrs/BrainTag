@@ -10,12 +10,14 @@
  *
  * Created: 19 July 2013 by Alex Rosengarten
  * Arduino Brain Library by Eric Mika, 2010
- * Last Update: 7 March 2014 
+ * Last Update: 13 March 2014 
  *
  * Since the last version:
- * - Separated intensityMeter and determineIfFire
- * - Fixed main loop -- now it's not being used to test the receiver
- * - Added method headers. 
+ * - Merged sender code and reciever code into this file using an interrupt
+ *   » Changed the variable names for IR_reciever so they don't conflict with code here
+ *   » Simplified the getIRkey() function to execute in as few commands as possible.
+ *     TODO: Optimize method in Assembly
+ *   » Attached an interrupt such that getIRkey() is called when the IR sensor pin on falling edge.
  */
 
 #include <Brain.h>
@@ -30,11 +32,17 @@ boolean DEBUG = true;
 // Pin Settings
 const byte irPin = 2;          // IR LED
 const byte irPin2 = 8;         // laser
+const byte irRec;              // Sensor pin 1 wired through a 220 ohm resistor
 const byte rPin = 3;           // RGB LED Pins
 const byte gPin = 5;
 const byte bPin = 6;
 const byte spPin =  7;          // Speaker Pin
-const byte numMagPins = 3; const byte magPins[numMagPins] = {9, 10, 11};  // Magnitude indicators
+const byte numMagPins = 3; 
+const byte magPins[numMagPins] = {9, 10, 11};  // Magnitude indicators
+const byte ledPWR[numMagPins]  = {0, 0, 0};    // Indicator LED power levels
+const byte numLifePins = 5;
+const byte lifePins[numLifePins]; // = {3, 4, 5, 7, 8};  // Life/health indicators
+const byte lifePWR[numLifePins];  // = {0, 0, 0, 0, 0};  // Life/health LED power levels
 const byte buttonPin = 12;     // Pushbutton pin
 const byte sgPin = 13;         // Signal Quality Pin
 
@@ -59,12 +67,14 @@ boolean sampleFullFlag  = false;
 byte i; byte j; int k; // General counter
 byte toggleCount = -1;
 byte eegState = -1; 
-byte eegData[numStates] = {};
+byte eegir_data[numStates] = {};
+volatile int ir_data[12]; 
+volatile int ir_key = 0;  
 //byte eegSample[sampleSize] = {}; byte sample_index = 0; 
 
 // The sum of a series of incrementing integers {1, 2, 3, ..., n-1, n} is equal to n^2/2 + n/2.
 // Divide this by sample size (n) and you get n/2 + 1/2. 
-//long series_x = sampleSize/2+0.5;
+// long series_x = sampleSize/2+0.5;
 
 //float topMagReached = defaultFireThreshold;
 unsigned long waitTime = 0;
@@ -74,11 +84,17 @@ byte oldMeditation;
 
 // IR remote sender
 int data[12];
-int start_bit = 2400;                    // Start bit threshold (Microseconds)
-int bin_1 = 1200;                        // Binary 1 threshold (Microseconds)
-int bin_0 = 600;                         // Binary 0 threshold (Microseconds)
+int start_bit_out = 2400;                    // Start bit threshold (Microseconds)
+int bin_1_out = 1200;                        // Binary 1 threshold (Microseconds)
+int bin_0_out = 600;                         // Binary 0 threshold (Microseconds)
 int dataOut = 0;
 int guardTime = 300;
+
+// IR remote reciever
+int start_bit_in = 2000;               // Start bit threshold (Microseconds)
+int bin_1_in =     1000;               // Binary 1 threshold (Microseconds)
+int bin_0_in =     400;                // Binary 0 threshold (Microseconds)
+
 
 // Tones
 int offTone       =  NOTE_F4;
@@ -88,10 +104,11 @@ int fireTone[]    = {NOTE_C7,  NOTE_D7};
 int headsetOnTone =  NOTE_F2;
 
 void setup() {
-  Serial.begin(57600); // Baud rate
+  Serial.begin(9600); // Baud rate
   
   // Inputs
   pinMode(buttonPin, INPUT);
+  pinMode(irRec, INPUT);
 
   // Outputs
   pinMode(rPin, OUTPUT);      pinMode(gPin, OUTPUT);      pinMode(bPin, OUTPUT);      // RBG LED
@@ -99,8 +116,17 @@ void setup() {
   pinMode(sgPin,OUTPUT);      pinMode(irPin,OUTPUT);           // Signal Quality & Laser 
   pinMode(irPin2,OUTPUT);     pinMode(spPin,OUTPUT);           // IR LED and Speaker
   
+  pinMode(lifePins[0], OUTPUT); pinMode(lifePWR[0], OUTPUT);
+  pinMode(lifePins[1], OUTPUT); pinMode(lifePWR[1], OUTPUT);
+  pinMode(lifePins[2], OUTPUT); pinMode(lifePWR[2], OUTPUT);
+  pinMode(lifePins[3], OUTPUT); pinMode(lifePWR[3], OUTPUT);
+  pinMode(lifePins[4], OUTPUT); pinMode(lifePWR[4], OUTPUT);
+  
   // Init game to off mode
   toggleState(toggleCount++); 
+  
+  // Interrupts
+  attachInterrupt(0, getIRkey, FALLING); // Try either FALLING or RISING
   
   // Debug tests
   if(DEBUG){
@@ -201,7 +227,13 @@ void loop() {
   
     
   // Visualize EEG Data via Magnitude Indicator Pins
-  intensityMeter(eegData[eegState]);  // Default is three mag pins 
+  //intensityMeter(eegData[eegState]);  // Default is three mag pins
+  
+  // Visualize health points via Magnitude Indicator Pins
+  if(ir_key > 1400 && ir_key < 1500){
+    health -= 10;
+  }
+  intensityMeter(health); 
   
   // Method call to determine and execute a shot
   determineIfFire(eegData[eegState]);
@@ -270,15 +302,70 @@ void intensityMeter(int mag){
   if(mag < 0) ledBlink(rPin,2,200); // Blink red if negative. Something is broken.
   
   // Divide the input magnitude into three ranges. Map each range to a brightness val
-  byte ledPWR1 = map(constrain(mag, 00, 33), 00, 33, 0, 255);
-  byte ledPWR2 = map(constrain(mag, 33, 66), 33, 66, 0, 255);
-  byte ledPWR3 = map(constrain(mag, 66, 99), 66, 99, 0, 255);
+  byte ledPWR[0] = map(constrain(mag, 00, 33), 00, 33, 0, 255);
+  byte ledPWR[1] = map(constrain(mag, 33, 66), 33, 66, 0, 255);
+  byte ledPWR[2] = map(constrain(mag, 66, 99), 66, 99, 0, 255);
   
   // Display the brightness values over the LEDs
   analogWrite(magPins[0],ledPWR1);
   analogWrite(magPins[1],ledPWR2);
   analogWrite(magPins[2],ledPWR3);
 } /* END intensityMeter */
+
+
+/** getIRKey()
+ * 
+ */
+void getIRKey() {
+
+ //digitalWrite(led_pin, HIGH);      // Ok, i'm ready to recieve
+ while(pulseIn(irRec, LOW) < 2200){} // Wait for a start bit
+ 
+ ir_data[0]  = pulseIn(irRec, LOW);       //Start measuring bits, I only want low pulses
+ ir_data[1]  = pulseIn(irRec, LOW);
+ ir_data[2]  = pulseIn(irRec, LOW);
+ ir_data[3]  = pulseIn(irRec, LOW);
+ ir_data[4]  = pulseIn(irRec, LOW);
+ ir_data[5]  = pulseIn(irRec, LOW);
+ ir_data[6]  = pulseIn(irRec, LOW);
+ ir_data[7]  = pulseIn(irRec, LOW);
+ ir_data[8]  = pulseIn(irRec, LOW);
+ ir_data[9]  = pulseIn(irRec, LOW);
+ ir_data[10] = pulseIn(irRec, LOW);
+ ir_data[11] = pulseIn(irRec, LOW);
+ //digitalWrite(led_pin, LOW);
+ ir_key = 0;
+ for(i=0; i<= 11; i++) {        // Parse Data:
+   if(ir_data[i] > bin_1_in) {     // Is it a 1?
+      ir_key |= (1<<i);
+   } else {
+       if(ir_data[i] < bin_0_in) { // Is flag invalid?
+         ir_key = -1;             
+         return;                    
+       }
+   }
+ } /* END FOR LOOP */
+
+} /* END getIRkey */
+
+
+/** healthMeter
+ *
+ *
+ */
+void healthMeter(int health){
+  if(health <= -1) //ledBlink(rPin,2,200);
+  lifePWR[0] = map(constrain(health, 00, 20),  00, 20,  0, 255);
+  lifePWR[1] = map(constrain(health, 21, 40),  21, 40,  0, 255);
+  lifePWR[2] = map(constrain(health, 41, 60),  41, 60,  0, 255);
+  lifePWR[3] = map(constrain(health, 61, 80),  61, 80,  0, 255);
+  lifePWR[4] = map(constrain(health, 81, 100), 81, 100, 0, 255);
+  analogWrite(lifePins[0],lifePWR[0]);
+  analogWrite(lifePins[1],lifePWR[1]);
+  analogWrite(lifePins[2],lifePWR[2]);
+  analogWrite(lifePins[3],lifePWR[3]);
+  analogWrite(lifePins[4],lifePWR[4]);
+} /* END healthMeter */
 
 /** determineIfFire
  * Firing mechanism for headset. Records current time and calculates time when headset
@@ -301,11 +388,11 @@ void determineIfFire(int mag){
   if(mag >= 70 && headsetStatus == "on" && currentTime >= waitTime){ 
 
     // This transmits a signal like a TV remote
-    oscillationWrite(irPin, start_bit);
+    oscillationWrite(irPin, start_bit_out);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
-    oscillationWrite(irPin,bin_0);
+    oscillationWrite(irPin,bin_0_out);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
-    oscillationWrite(irPin,bin_1);
+    oscillationWrite(irPin,bin_1_out);
     digitalWrite(irPin,HIGH); delayMicroseconds(guardTime);
   
     // Calculate when the IR LED should stop firing and when it can fire again.
@@ -318,7 +405,7 @@ void determineIfFire(int mag){
     }
  }
  
-}
+} /* END determineIfFire */
 
 /** toggleState
  * Takes in a toggle state counter to determine which game mode to be in. By 
@@ -327,7 +414,7 @@ void determineIfFire(int mag){
  * @param t state counter
  */
 void toggleState(byte t) {
-  // Mod function to determine state from counter
+  // Mod function to determine state from counter  
   eegState = t % numStates;
   
   // Switch statement to execute state. 
@@ -395,15 +482,15 @@ int sendIRKey(int dataOut) {
   }
   
   // send startbit
-  oscillationWrite(irPin, start_bit);
+  oscillationWrite(irPin, start_bit_out);
   // send separation bit
   digitalWrite(irPin, HIGH);
   delayMicroseconds(guardTime);
   
   // send the whole string of data
   for (i=11; i>=0; i--) {
-    if (data[i] == 0) oscillationWrite(irPin, bin_0);
-    else oscillationWrite(irPin, bin_1);
+    if (data[i] == 0) oscillationWrite(irPin, bin_0_out);
+    else oscillationWrite(irPin, bin_1_out);
     // send separation bit
     digitalWrite(irPin, HIGH);
     delayMicroseconds(guardTime);

@@ -344,6 +344,5 @@ void toggleState(byte t) {
 / / /_       __\ \_\ \/___/ / / / /  \ \ \    
 \_\___\     /____/_/\_____\/  \/_/    \_\/    
 
-[ Alexander          Sky         Rosengarten ]
 */
 
